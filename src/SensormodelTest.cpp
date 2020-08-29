@@ -7,6 +7,7 @@
 
 #include "SensormodelTest.h"
 #include "obcore/math/mathbase.h"
+#include "obvision/reconstruct/space/RayCast3D.h"
 #include "obvision/reconstruct/space/RayCastAxisAligned3D.h"
 #include <iostream>
 #include <pcl_ros/point_cloud.h>
@@ -16,10 +17,14 @@ SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float
     : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _cellsX(0), _cellsY(0), _cellsZ(0)
 {
   std::cout << "Constructor. Hey gorgeous, you can do this." << std::endl;
-  _subPointcloud       = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
-  _pubAxisAlignedCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
-  _pubRedBlueRendered  = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
-  _tfBaseFrame         = "map"; // changed to map for artificial box data from cloud_factory
+  _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
+  _pubAxisAlignedCloud   = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
+  _pubRedBlueRendered    = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
+  _pubSensorRaycastCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("sensorRaycastCloud", 1);
+  // _tfBaseFrame           = "map"; // changed to map for artificial box data from cloud_factory
+  // new base_frame for bag
+  _tfBaseFrame = "puck_rear";
+  _virginPush  = false;
 }
 
 SensormodelTest::~SensormodelTest() {}
@@ -121,6 +126,7 @@ bool SensormodelTest::pubAxisAlignedRaycaster(void)
 
   cloud.header.frame_id = _tfBaseFrame;
   cloud.header.seq      = seq++;
+  std::cout << __PRETTY_FUNCTION__ << " publishing " << cloud.size() << " points" << std::endl;
   _pubAxisAlignedCloud.publish(cloud);
   return true;
 }
@@ -204,6 +210,43 @@ void SensormodelTest::redBlueRenderSpace(pcl::PointCloud<pcl::PointXYZRGB>& clou
   std::cout << __PRETTY_FUNCTION__ << " publishing " << cloud.size() << " points" << std::endl;
 }
 
+void SensormodelTest::pubSensorRaycast(pcl::PointCloud<pcl::PointXYZ>& cloud)
+{
+  static obvious::obfloat* coords  = new obvious::obfloat[_cellsX * _cellsY * _cellsZ * 3];
+  static obvious::obfloat* normals = new obvious::obfloat[_cellsX * _cellsY * _cellsZ * 3];
+  static unsigned char*    rgb     = new unsigned char[_cellsX * _cellsY * _cellsZ * 3];
+  static unsigned int      seq     = 0;
+
+  // WAS MACHT DAS HIER
+  // obvious::Matrix T = _sensor->getTransformation();
+  // _filterBounds->setPose(&T);
+
+  unsigned int width  = _sensor->getWidth();
+  unsigned int height = _sensor->getHeight();
+  unsigned int size   = 0;
+
+  obvious::RayCast3D raycasterSensor;
+  raycasterSensor.calcCoordsFromCurrentPose(_space.get(), _sensor.get(), coords, normals, rgb, &size);
+
+  obvious::obfloat tr[3];
+  _space->getCentroid(tr);
+
+  for(unsigned int i = 0; i < size; i += 3)
+  {
+    pcl::PointXYZ p;
+
+    p.x = coords[i] - tr[0];
+    p.z = coords[i + 1] - tr[1];
+    p.y = coords[i + 2] - tr[2];
+    p.x = -p.x;
+    cloud.push_back(p);
+  }
+
+  cloud.header.frame_id = _tfBaseFrame;
+  cloud.header.seq      = seq++;
+  std::cout << __PRETTY_FUNCTION__ << " publishing " << cloud.size() << " points" << std::endl;
+}
+
 void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
   // if neither sensor nor space are initialized yet -> do so in init routine
@@ -214,64 +257,77 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   // den ganzen tf listener Kram lass ich erstmal weg//
   ////////////////////////////////////////////////////
 
-  // transform sensor
-  obvious::Matrix TransMat(4, 4);
-  TransMat.setIdentity();
-  obvious::obfloat center[3];
-  _space->getCentroid(center);
-  obvious::obfloat yaw   = 0.0;
-  obvious::obfloat pitch = 0.0;
-  obvious::obfloat roll  = 0.0;
-  TransMat               = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0], center[1], center[2]);
-  _sensor->setTransformation(TransMat);
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
-  std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
-  _sensor->getTransformation().print();
-
-  // extract data from pointcloud and write it to a vector of size height*weight, calculate depth value from xyz
-  std::vector<double> depthData(cloud.height * cloud.width, 0.0);
-  bool*               mask = new bool[cloud.height * cloud.width];
-
-  std::cout << "Pointcloud height = " << cloud.height << " , width = " << cloud.width << std::endl;
-
-  unsigned int valid = 0;
-  for(unsigned int i = 0; i < cloud.height; i++)
+  // nur first Push
+  if(!_virginPush)
   {
-    for(unsigned int j = 0; j < cloud.width; j++)
-    {
-      const unsigned int idx = i * cloud.width + j;
-      Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
+    std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
 
-      double abs = static_cast<double>(point.norm());
-      if(abs > 0.0)
+    // transform sensor
+    obvious::Matrix TransMat(4, 4);
+    TransMat.setIdentity();
+    obvious::obfloat center[3];
+    _space->getCentroid(center);
+    obvious::obfloat yaw   = 0.0;
+    obvious::obfloat pitch = 0.0;
+    obvious::obfloat roll  = 0.0;
+    TransMat               = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0], center[1], center[2]);
+    _sensor->setTransformation(TransMat);
+    std::cout << __PRETTY_FUNCTION__ << std::endl;
+    std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
+    _sensor->getTransformation().print();
+
+    // extract data from pointcloud and write it to a vector of size height*weight, calculate depth value from xyz
+    std::vector<double> depthData(cloud.height * cloud.width, 0.0);
+    bool*               mask = new bool[cloud.height * cloud.width];
+
+    std::cout << "Pointcloud height = " << cloud.height << " , width = " << cloud.width << std::endl;
+
+    unsigned int valid = 0;
+    for(unsigned int i = 0; i < cloud.height; i++)
+    {
+      for(unsigned int j = 0; j < cloud.width; j++)
       {
-        depthData[idx] = abs;
-        // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
-        mask[idx] = true;
-        valid++;
-      }
-      else
-      {
-        mask[idx] = false;
+        const unsigned int idx = i * cloud.width + j;
+        Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
+
+        double abs = static_cast<double>(point.norm());
+        if(abs > 0.0)
+        {
+          depthData[idx] = abs;
+          // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
+          mask[idx] = true;
+          valid++;
+        }
+        else
+        {
+          mask[idx] = false;
+        }
       }
     }
-  }
 
-  if(!valid)
+    if(!valid)
+    {
+      std::cout << __PRETTY_FUNCTION__ << " no valid points with depth value > 0.0 in data " << std::endl;
+      return;
+    }
+    std::cout << __PRETTY_FUNCTION__ << " pushing " << valid << " valid points " << std::endl;
+    _sensor->setRealMeasurementData(depthData.data());
+    _sensor->setRealMeasurementMask(mask);
+
+    delete mask;
+    _space->push(_sensor.get());
+    _virginPush = true;
+  }
+  else
   {
-    std::cout << __PRETTY_FUNCTION__ << " no valid points with depth value > 0.0 in data " << std::endl;
-    return;
+    this->pubAxisAlignedRaycaster();
+
+    pcl::PointCloud<pcl::PointXYZRGB> redBlueRenderedCloud;
+    this->redBlueRenderSpace(redBlueRenderedCloud);
+    _pubRedBlueRendered.publish(redBlueRenderedCloud);
+
+    pcl::PointCloud<pcl::PointXYZ> sensorRaycastCloud;
+    this->pubSensorRaycast(sensorRaycastCloud);
+    _pubSensorRaycastCloud.publish(sensorRaycastCloud);
   }
-  std::cout << __PRETTY_FUNCTION__ << " pushing " << valid << " valid points " << std::endl;
-  _sensor->setRealMeasurementData(depthData.data());
-  _sensor->setRealMeasurementMask(mask);
-
-  delete mask;
-  _space->push(_sensor.get());
-
-  this->pubAxisAlignedRaycaster();
-  pcl::PointCloud<pcl::PointXYZRGB> redBlueRenderedCloud;
-  this->redBlueRenderSpace(redBlueRenderedCloud);
-
-  _pubRedBlueRendered.publish(redBlueRenderedCloud);
 }

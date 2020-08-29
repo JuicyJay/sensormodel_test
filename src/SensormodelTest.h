@@ -24,6 +24,7 @@ public:
 private:
   void init(const pcl::PointCloud<pcl::PointXYZ>& cloud);
   void redBlueRenderSpace(pcl::PointCloud<pcl::PointXYZRGB>& cloud);
+  void pubSensorRaycast(pcl::PointCloud<pcl::PointXYZ>& cloud);
 
   std::unique_ptr<obvious::TsdSpace>            _space;
   std::unique_ptr<obvious::SensorVelodyne3DNew> _sensor;
@@ -33,6 +34,7 @@ private:
   ros::NodeHandle _nh;
   ros::Publisher  _pubAxisAlignedCloud;
   ros::Publisher  _pubRedBlueRendered;
+  ros::Publisher  _pubSensorRaycastCloud;
 
   float        _dimX;
   float        _dimY;
@@ -41,4 +43,5 @@ private:
   unsigned int _cellsX;
   unsigned int _cellsY;
   unsigned int _cellsZ;
+  bool         _virginPush;
 };
