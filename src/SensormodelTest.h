@@ -10,6 +10,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
 #include <tf/tf.h>
+#include <tf/transform_listener.h>
 
 typedef std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d> > stdVecEig3d;
 
@@ -29,12 +30,14 @@ private:
   std::unique_ptr<obvious::TsdSpace>            _space;
   std::unique_ptr<obvious::SensorVelodyne3DNew> _sensor;
   std::string                                   _tfBaseFrame;
+  std::string                                   _tfLookupSourceFrame;
 
-  ros::Subscriber _subPointcloud;
-  ros::NodeHandle _nh;
-  ros::Publisher  _pubAxisAlignedCloud;
-  ros::Publisher  _pubRedBlueRendered;
-  ros::Publisher  _pubSensorRaycastCloud;
+  ros::Subscriber                        _subPointcloud;
+  ros::NodeHandle                        _nh;
+  ros::Publisher                         _pubAxisAlignedCloud;
+  ros::Publisher                         _pubRedBlueRendered;
+  ros::Publisher                         _pubSensorRaycastCloud;
+  std::unique_ptr<tf::TransformListener> _listener;
 
   float        _dimX;
   float        _dimY;
