@@ -5,6 +5,7 @@
  *      Author: jasmin
  */
 
+#include "obvision/reconstruct/space/SensorVelodyne3D.h"
 #include "obvision/reconstruct/space/SensorVelodyne3DNew.h"
 #include "obvision/reconstruct/space/TsdSpace.h"
 #include <pcl_ros/point_cloud.h>
@@ -28,7 +29,8 @@ private:
 
   std::unique_ptr<obvious::TsdSpace>            _space;
   std::unique_ptr<obvious::SensorVelodyne3DNew> _sensor;
-  std::string                                   _tfBaseFrame;
+  // std::unique_ptr<obvious::SensorVelodyne3D> _sensor;
+  std::string _tfBaseFrame;
 
   ros::Subscriber _subPointcloud;
   ros::NodeHandle _nh;

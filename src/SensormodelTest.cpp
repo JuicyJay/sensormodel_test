@@ -21,10 +21,10 @@ SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float
   _pubAxisAlignedCloud   = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
   _pubRedBlueRendered    = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
   _pubSensorRaycastCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("sensorRaycastCloud", 1);
-  // _tfBaseFrame           = "map"; // changed to map for artificial box data from cloud_factory
+  _tfBaseFrame           = "map"; // changed to map for artificial box data from cloud_factory
   // new base_frame for bag
-  _tfBaseFrame = "puck_rear";
-  _virginPush  = false;
+  // _tfBaseFrame = "puck_rear";
+  _virginPush = false;
 }
 
 SensormodelTest::~SensormodelTest() {}
@@ -36,10 +36,6 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
     return;
 
   // 1. INITIALIZE SPACE
-
-  ////////////////////////////////////////////////////////////////
-  // das fac * 64 zeug lass ich erstmal weg, kp was phil da macht//
-  ////////////////////////////////////////////////////////////////
 
   unsigned int cellsX = static_cast<unsigned int>(std::round(_dimX / _cellSize));
   unsigned int cellsY = static_cast<unsigned int>(std::round(_dimY / _cellSize));
@@ -66,15 +62,24 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
   Tinit.setData(tf);
 
   // 2. INITIALIZE SENSOR
+  // SensorVelodyne3DNew
+  // /**
   unsigned int raysIncl = 16;
   double       inclMin  = obvious::deg2rad(-15.0);
   double       inclMax  = obvious::deg2rad(15.0);
   double       inclRes  = obvious::deg2rad(2.0);
   double       azimMin  = obvious::deg2rad(0.0);
   double       azimMax  = obvious::deg2rad(360.0);
-  double       azimRes  = obvious::deg2rad(2.0); // CAREFUL this should be 0.2, just 4 debugging
+  double       azimRes  = obvious::deg2rad(0.2); // CAREFUL this should be 0.2, just 4 debugging
+  _sensor               = std::make_unique<obvious::SensorVelodyne3DNew>(raysIncl, inclMin, inclMax, inclRes, azimMin, azimMax, azimRes);
+  // **/
 
-  _sensor = std::make_unique<obvious::SensorVelodyne3DNew>(raysIncl, inclMin, inclMax, inclRes, azimMin, azimMax, azimRes);
+  // SensorVelodyne3D
+  // unsigned int raysIncl = 16;
+  // double       inclMin  = obvious::deg2rad(-15.0);
+  // double       inclRes  = obvious::deg2rad(2.0);
+  // double       azimRes  = obvious::deg2rad(0.2);
+
   _sensor->setTransformation(Tinit);
   std::cout << "You go girl! Sensor pose after transforming to the middle of TSD space: " << std::endl;
   _sensor->getTransformation().print();
@@ -103,7 +108,7 @@ bool SensormodelTest::pubAxisAlignedRaycaster(void)
     p.x = coords[i] - tr[0];
     p.y = coords[i + 1] - tr[1];
     p.z = coords[i + 2] - tr[2];
-    p.x = -p.x; // warum macht er das?
+    // p.x = -p.x; // warum macht er das?
 
     p.normal_x = normals[i] - tr[0];
     p.normal_y = normals[i + 1] - tr[1];
@@ -227,7 +232,7 @@ void SensormodelTest::pubSensorRaycast(pcl::PointCloud<pcl::PointXYZ>& cloud)
 
   obvious::RayCast3D raycasterSensor;
   raycasterSensor.calcCoordsFromCurrentPose(_space.get(), _sensor.get(), coords, normals, rgb, &size);
-
+  std::cout << __PRETTY_FUNCTION__ << "AAAAAAAAAAAA calcCoordsFromCurrentPose size = " << size << std::endl;
   obvious::obfloat tr[3];
   _space->getCentroid(tr);
 
@@ -235,10 +240,17 @@ void SensormodelTest::pubSensorRaycast(pcl::PointCloud<pcl::PointXYZ>& cloud)
   {
     pcl::PointXYZ p;
 
+    // p.x = coords[i] - tr[0];
+    // p.z = coords[i + 1] - tr[1];
+    // p.y = coords[i + 2] - tr[2];
+    // p.x = -p.x;
+    // cloud.push_back(p);
+
+    // y u z vertauschen
     p.x = coords[i] - tr[0];
-    p.z = coords[i + 1] - tr[1];
-    p.y = coords[i + 2] - tr[2];
-    p.x = -p.x;
+    p.y = coords[i + 1] - tr[1];
+    p.z = coords[i + 2] - tr[2];
+    // p.x = -p.x;
     cloud.push_back(p);
   }
 
@@ -283,12 +295,20 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     std::cout << "Pointcloud height = " << cloud.height << " , width = " << cloud.width << std::endl;
 
     unsigned int valid = 0;
-    for(unsigned int i = 0; i < cloud.height; i++)
+
+    // HEIGHT u WIDTH UMDREHEN WIE IN KÜNSTLICHEN DATEN UND SENSOR SORTIERT -> kein unterschied. ist ja klar. verzweifelter depp
+    for(unsigned int i = 0; i < cloud.width; i++)
     {
-      for(unsigned int j = 0; j < cloud.width; j++)
+      for(unsigned int j = 0; j < cloud.height; j++)
       {
-        const unsigned int idx = i * cloud.width + j;
-        Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
+        // NUR für künstliche Daten richtig --> SONST J NEHMEN weil HEIGHT = 1 IN VELOROSPOINTCLOUD
+        const unsigned int idx = i * cloud.height + j; // das würde doch auch einfach mit ++ bis height*width gehen
+        std::cout << __PRETTY_FUNCTION__ << "idx = i * cloud.height + j = " << i << " * " << cloud.height << " + " << j << " = " << idx << std::endl;
+
+        Eigen::Vector3f point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
+
+        // Y u Z VERTAUSCHEN --> ändert aber nichts an abs --> bringt nichts
+        // Eigen::Vector3f point(cloud.points[idx].x, cloud.points[idx].z, cloud.points[idx].y);
 
         double abs = static_cast<double>(point.norm());
         if(abs > 0.0)
@@ -304,6 +324,29 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
         }
       }
     }
+    // HEIGHT u WIDTH andersrum
+    // for(unsigned int i = 0; i < cloud.height; i++)
+    // {
+    //   for(unsigned int j = 0; j < cloud.width; j++)
+    //   {
+    //     // NUR für künstliche Daten richtig --> SONST J NEHMEN weil HEIGHT = 1 IN VELOROSPOINTCLOUD
+    //     const unsigned int idx = i * cloud.width + j;
+    //     Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
+
+    //     double abs = static_cast<double>(point.norm());
+    //     if(abs > 0.0)
+    //     {
+    //       depthData[idx] = abs;
+    //       // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
+    //       mask[idx] = true;
+    //       valid++;
+    //     }
+    //     else
+    //     {
+    //       mask[idx] = false;
+    //     }
+    //   }
+    // }
 
     if(!valid)
     {
