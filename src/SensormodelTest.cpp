@@ -14,24 +14,17 @@
 #include <pcl_ros/transforms.h>
 
 SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float dimZ, const float cellSize)
-    : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _listener(std::make_unique<tf::TransformListener>()), _cellsX(0), _cellsY(0), _cellsZ(0)
+    : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _cellsX(0), _cellsY(0), _cellsZ(0)
 {
   std::cout << "Constructor. Hey gorgeous, you can do this." << std::endl;
-  // topic for arena obstable bag and artificial data
-  _subPointcloud = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
-  // topic for rock_chamber_front bag
-  // _subPointcloud         = _nh.subscribe("transformed_cloud", 1, &SensormodelTest::callbackPointcloud, this);
+  _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
   _pubAxisAlignedCloud   = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
   _pubRedBlueRendered    = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
   _pubSensorRaycastCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("sensorRaycastCloud", 1);
   // _tfBaseFrame           = "map"; // changed to map for artificial box data from cloud_factory
-  // new base_frame for bag arena obsacle
-  _tfBaseFrame         = "puck_rear";
-  _tfLookupSourceFrame = "puck_rear";
-  // base frame for rock_chamber_front
-  // _tfBaseFrame = "map";
-  // _tfLookupSourceFrame = "map";
-  // _virginPush          = false;
+  // new base_frame for bag
+  _tfBaseFrame = "puck_rear";
+  _virginPush  = false;
 }
 
 SensormodelTest::~SensormodelTest() {}
@@ -43,6 +36,11 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
     return;
 
   // 1. INITIALIZE SPACE
+
+  ////////////////////////////////////////////////////////////////
+  // das fac * 64 zeug lass ich erstmal weg, kp was phil da macht//
+  ////////////////////////////////////////////////////////////////
+
   unsigned int cellsX = static_cast<unsigned int>(std::round(_dimX / _cellSize));
   unsigned int cellsY = static_cast<unsigned int>(std::round(_dimY / _cellSize));
   unsigned int cellsZ = static_cast<unsigned int>(std::round(_dimZ / _cellSize));
@@ -255,44 +253,24 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   if(!_sensor || !_space)
     this->init(cloud);
 
-  ros::Time            elapsedTimer = ros::Time::now();
-  tf::StampedTransform tfSensor;
-  // look up transform from map to _tfBaseFrame = base_link for my sensor to transform sensor!
-  try
-  {
-    _listener->lookupTransform(_tfBaseFrame, _tfLookupSourceFrame, ros::Time(0), tfSensor);
-  }
-  catch(const tf::TransformException& e)
-  {
-    std::cout << __PRETTY_FUNCTION__ << "e: " << e.what() << std::endl;
-    return;
-  }
+  /////////////////////////////////////////////////////
+  // den ganzen tf listener Kram lass ich erstmal weg//
+  ////////////////////////////////////////////////////
 
   // nur first Push
   if(!_virginPush)
   {
     std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
 
-    tf::Quaternion quat  = tfSensor.getRotation();
-    double         roll  = 0.0;
-    double         pitch = 0.0;
-    double         yaw   = 0.0;
-    tf::Matrix3x3  RotMat(quat);
-    RotMat.getRPY(roll, pitch, yaw);
-    std::cout << __PRETTY_FUNCTION__ << "RPY " << roll << " " << pitch << " " << yaw << " " << std::endl;
-
     // transform sensor
     obvious::Matrix TransMat(4, 4);
     TransMat.setIdentity();
     obvious::obfloat center[3];
     _space->getCentroid(center);
-    tf::Vector3 tfVec = tfSensor.getOrigin();
-
-    // obvious::obfloat yaw   = 0.0;
-    // obvious::obfloat pitch = 0.0;
-    // obvious::obfloat roll  = 0.0;
-    TransMat = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfSensor.getOrigin().getY(),
-                                                              center[2] + tfSensor.getOrigin().getZ());
+    obvious::obfloat yaw   = 0.0;
+    obvious::obfloat pitch = 0.0;
+    obvious::obfloat roll  = 0.0;
+    TransMat               = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0], center[1], center[2]);
     _sensor->setTransformation(TransMat);
     std::cout << __PRETTY_FUNCTION__ << std::endl;
     std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
@@ -313,12 +291,10 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
         Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
 
         double abs = static_cast<double>(point.norm());
-        std::cout << __PRETTY_FUNCTION__ << "!!!!!!!!!!! abs = " << abs << std::endl;
         if(abs > 0.0)
         {
           depthData[idx] = abs;
           // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
-
           mask[idx] = true;
           valid++;
         }
