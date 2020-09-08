@@ -17,9 +17,8 @@ SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float
     : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _cellsX(0), _cellsY(0), _cellsZ(0)
 {
   std::cout << "Constructor. Hey gorgeous, you can do this." << std::endl;
-  _subPointcloud = _nh.subscribe("transformed_cloud", 1, &SensormodelTest::callbackPointcloud, this);
-
-  // _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
+  // _subPointcloud = _nh.subscribe("transformed_cloud", 1, &SensormodelTest::callbackPointcloud, this);
+  _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
   _pubAxisAlignedCloud   = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
   _pubRedBlueRendered    = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
   _pubSensorRaycastCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("sensorRaycastCloud", 1);
