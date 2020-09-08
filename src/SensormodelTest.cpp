@@ -293,6 +293,8 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     bool*               mask = new bool[cloud.height * cloud.width];
 
     std::cout << "Pointcloud height = " << cloud.height << " , width = " << cloud.width << std::endl;
+    std::cout << __PRETTY_FUNCTION__ << "there is no enforcing that the value of height * width = " << cloud.height * cloud.width << std::endl;
+    std::cout << __PRETTY_FUNCTION__ << "is the same as depthData.size = " << depthData.size() << std::endl;
 
     unsigned int valid = 0;
 
@@ -303,7 +305,7 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
       {
         // NUR für künstliche Daten richtig --> SONST J NEHMEN weil HEIGHT = 1 IN VELOROSPOINTCLOUD
         const unsigned int idx = i * cloud.height + j; // das würde doch auch einfach mit ++ bis height*width gehen
-        std::cout << __PRETTY_FUNCTION__ << "idx = i * cloud.height + j = " << i << " * " << cloud.height << " + " << j << " = " << idx << std::endl;
+        // std::cout << __PRETTY_FUNCTION__ << "idx = i * cloud.height + j = " << i << " * " << cloud.height << " + " << j << " = " << idx << std::endl;
 
         Eigen::Vector3f point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
 
@@ -324,29 +326,6 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
         }
       }
     }
-    // HEIGHT u WIDTH andersrum
-    // for(unsigned int i = 0; i < cloud.height; i++)
-    // {
-    //   for(unsigned int j = 0; j < cloud.width; j++)
-    //   {
-    //     // NUR für künstliche Daten richtig --> SONST J NEHMEN weil HEIGHT = 1 IN VELOROSPOINTCLOUD
-    //     const unsigned int idx = i * cloud.width + j;
-    //     Eigen::Vector3f    point(cloud.points[idx].x, cloud.points[idx].y, cloud.points[idx].z);
-
-    //     double abs = static_cast<double>(point.norm());
-    //     if(abs > 0.0)
-    //     {
-    //       depthData[idx] = abs;
-    //       // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
-    //       mask[idx] = true;
-    //       valid++;
-    //     }
-    //     else
-    //     {
-    //       mask[idx] = false;
-    //     }
-    //   }
-    // }
 
     if(!valid)
     {
