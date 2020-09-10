@@ -14,7 +14,7 @@
 #include <pcl_ros/transforms.h>
 
 SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float dimZ, const float cellSize)
-    : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _cellsX(0), _cellsY(0), _cellsZ(0)
+    : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _listener(std::make_unique<tf::TransformListener>()), _cellsX(0), _cellsY(0), _cellsZ(0)
 {
   std::cout << "Constructor. Hey gorgeous, you can do this." << std::endl;
   // _subPointcloud = _nh.subscribe("transformed_cloud", 1, &SensormodelTest::callbackPointcloud, this);
@@ -266,24 +266,40 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   if(!_sensor || !_space)
     this->init(cloud);
 
-  /////////////////////////////////////////////////////
-  // den ganzen tf listener Kram lass ich erstmal weg//
-  ////////////////////////////////////////////////////
+  ros::Time            elapsedTimer = ros::Time::now();
+  tf::StampedTransform tf;
+  try
+  {
+    _listener->lookupTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), tf);
+  }
+  catch(const tf::TransformException& e)
+  {
+    std::cout << __PRETTY_FUNCTION__ << "e: " << e.what() << std::endl;
+    return;
+  }
 
   // nur first Push
   if(!_virginPush)
   {
     std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
 
+    // Eigen::Vector3f t(tf.getOrigin().getX(), tf.getOrigin().getY(), tf.getOrigin().getZ());
+    tf::Vector3    tfVec = tf.getOrigin();
+    tf::Quaternion quat  = tf.getRotation();
+    tf::Matrix3x3  RotMat(quat);
+    double         roll, pitch, yaw = 0.0;
+    RotMat.getRPY(roll, pitch, yaw);
+
     // transform sensor
     obvious::Matrix TransMat(4, 4);
     TransMat.setIdentity();
     obvious::obfloat center[3];
     _space->getCentroid(center);
-    obvious::obfloat yaw   = 0.0;
-    obvious::obfloat pitch = 0.0;
-    obvious::obfloat roll  = 0.0;
-    TransMat               = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0], center[1], center[2]);
+    // obvious::obfloat yaw   = 0.0;
+    // obvious::obfloat pitch = 0.0;
+    // obvious::obfloat roll  = 0.0;
+    TransMat =
+        obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfVec.getY(), center[2] + tfVec.getZ());
     _sensor->setTransformation(TransMat);
     std::cout << __PRETTY_FUNCTION__ << std::endl;
     std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
