@@ -18,14 +18,13 @@ SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float
 {
   std::cout << "Constructor. Hey gorgeous, you can do this." << std::endl;
   // _subPointcloud = _nh.subscribe("transformed_cloud", 1, &SensormodelTest::callbackPointcloud, this);
-  _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
+  // _subPointcloud         = _nh.subscribe("puck_rear/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this);
+  _subPointcloud         = _nh.subscribe("horizontal/velodyne_points", 1, &SensormodelTest::callbackPointcloud, this); // bagfile gazebo_puck_tf_lehrpfad.bag
   _pubAxisAlignedCloud   = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGBNormal> >("axisAlignedCloud", 1);
   _pubRedBlueRendered    = _nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("redBlueRendered_space", 1);
   _pubSensorRaycastCloud = _nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("sensorRaycastCloud", 1);
   _tfBaseFrame           = "map"; // changed to map for artificial box data from cloud_factory
-  // new base_frame for bag
-  // _tfBaseFrame = "puck_rear";
-  _virginPush = false;
+  _virginPush            = false;
 }
 
 SensormodelTest::~SensormodelTest() {}
@@ -265,12 +264,14 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   // if neither sensor nor space are initialized yet -> do so in init routine
   if(!_sensor || !_space)
     this->init(cloud);
+  std::cout << __PRETTY_FUNCTION__ << " cloud.header.frame_id = " << cloud.header.frame_id << std::endl;
 
   ros::Time            elapsedTimer = ros::Time::now();
-  tf::StampedTransform tf;
+  tf::StampedTransform tfSensor;
+  // look up transform from cloud base frame_id to _tfBaseFrame=map for my sensor to transform sensor!
   try
   {
-    _listener->lookupTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), tf);
+    _listener->lookupTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), tfSensor);
   }
   catch(const tf::TransformException& e)
   {
@@ -284,8 +285,8 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
 
     // Eigen::Vector3f t(tf.getOrigin().getX(), tf.getOrigin().getY(), tf.getOrigin().getZ());
-    tf::Vector3    tfVec = tf.getOrigin();
-    tf::Quaternion quat  = tf.getRotation();
+    tf::Vector3    tfVec = tfSensor.getOrigin();
+    tf::Quaternion quat  = tfSensor.getRotation();
     tf::Matrix3x3  RotMat(quat);
     double         roll, pitch, yaw = 0.0;
     RotMat.getRPY(roll, pitch, yaw);
@@ -310,8 +311,6 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     bool*               mask = new bool[cloud.height * cloud.width];
 
     std::cout << "Pointcloud height = " << cloud.height << " , width = " << cloud.width << std::endl;
-    std::cout << __PRETTY_FUNCTION__ << "there is no enforcing that the value of height * width = " << cloud.height * cloud.width << std::endl;
-    std::cout << __PRETTY_FUNCTION__ << "is the same as depthData.size = " << depthData.size() << std::endl;
 
     unsigned int valid = 0;
 
@@ -333,7 +332,7 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
         if(abs > 0.0)
         {
           depthData[idx] = abs;
-          // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird ne Kugel
+          // depthData[idx] = 1.0; // artificial data with uniform ray length -- wird n Thorus
           mask[idx] = true;
           valid++;
         }
