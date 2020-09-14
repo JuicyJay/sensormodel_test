@@ -2,8 +2,6 @@
 <launch>
 <node pkg="tf" type="static_transform_publisher" name="link_jasmin" args="0 0 0.0 0 0 0 base_link horizontal_velodyne 10" />
 <node pkg="tf" type="static_transform_publisher" name="link_jasmin2" args="0 0 0.0 0 0 0 base_link velodyne_base_link 10" />
-<!-- <node pkg="tf" type="static_transform_publisher" name="link_jasmin3" args="0 0 0.0 0 0 0 map velodyne_baselink 10" /> -->
-<!-- <node pkg="tf" type="static_transform_publisher" name="link_jasmin4" args="0 0 0.0 0 0 0 map horizontal_velodyne 10" /> -->
-
+<node pkg="tf" type="static_transform_publisher" name="movetoMiddleofSpace_link" args="4.80625 4.80625 4.80625 0 0 0 map ground_truth 10" />
 
 </launch>
