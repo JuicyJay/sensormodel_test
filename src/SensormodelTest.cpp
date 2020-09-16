@@ -271,6 +271,7 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   // look up transform from cloud base frame_id to _tfBaseFrame=map for my sensor to transform sensor!
   try
   {
+    _listener->waitForTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), ros::Duration(10.0));
     _listener->lookupTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), tfSensor);
   }
   catch(const tf::TransformException& e)
@@ -278,6 +279,7 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     std::cout << __PRETTY_FUNCTION__ << "e: " << e.what() << std::endl;
     return;
   }
+
 
   // nur first Push
   if(!_virginPush)
