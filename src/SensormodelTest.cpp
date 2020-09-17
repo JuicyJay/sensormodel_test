@@ -36,7 +36,6 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
     return;
 
   // 1. INITIALIZE SPACE
-
   unsigned int cellsX = static_cast<unsigned int>(std::round(_dimX / _cellSize));
   unsigned int cellsY = static_cast<unsigned int>(std::round(_dimY / _cellSize));
   unsigned int cellsZ = static_cast<unsigned int>(std::round(_dimZ / _cellSize));
@@ -62,8 +61,6 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
   Tinit.setData(tf);
 
   // 2. INITIALIZE SENSOR
-  // SensorVelodyne3DNew
-  // /**
   unsigned int raysIncl = 16;
   double       inclMin  = obvious::deg2rad(-15.0);
   double       inclMax  = obvious::deg2rad(15.0);
@@ -72,13 +69,6 @@ void SensormodelTest::init(const pcl::PointCloud<pcl::PointXYZ>& cloud)
   double       azimMax  = obvious::deg2rad(360.0);
   double       azimRes  = obvious::deg2rad(0.2); // CAREFUL this should be 0.2, just 4 debugging
   _sensor               = std::make_unique<obvious::SensorVelodyne3DNew>(raysIncl, inclMin, inclMax, inclRes, azimMin, azimMax, azimRes);
-  // **/
-
-  // SensorVelodyne3D
-  // unsigned int raysIncl = 16;
-  // double       inclMin  = obvious::deg2rad(-15.0);
-  // double       inclRes  = obvious::deg2rad(2.0);
-  // double       azimRes  = obvious::deg2rad(0.2);
 
   _sensor->setTransformation(Tinit);
   std::cout << "You go girl! Sensor pose after transforming to the middle of TSD space: " << std::endl;
@@ -271,8 +261,8 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
   // look up transform from cloud base frame_id to _tfBaseFrame=map for my sensor to transform sensor!
   try
   {
-    _listener->waitForTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), ros::Duration(10.0));
-    _listener->lookupTransform(cloud.header.frame_id, _tfBaseFrame, ros::Time(0), tfSensor);
+    _listener->waitForTransform("ground_truth", _tfBaseFrame, ros::Time(0), ros::Duration(10.0));
+    _listener->lookupTransform("ground_truth", _tfBaseFrame, ros::Time(0), tfSensor);
   }
   catch(const tf::TransformException& e)
   {
@@ -282,9 +272,30 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
 
 
   // nur first Push
-  if(!_virginPush)
+  if(!_virginPush) //muss das dann nicht weg?
   {
     std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
+
+  //FIRST INITIAL GROUND TRUTH
+    //erste translation von groundtruth nach map rausziehen & const abspeichern. jede tf meiner punktwolke damit verschieben
+    //bei der ersten reicht translation, wenn ich dann die neue tf immer wieder im callback verwerte, brauch ich auch die rotation
+    /**
+    const tf::Vector3 translGroundTrInitial = tfSensor.getOrigin();
+    const obvious::Matrix InitGroundTruth(4, 4);
+    InitGroundTruth = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, translGroundTrInitial.getX(), translGroundTrInitial.getY(), translGroundTrInitial.getZ());
+    const obvious::Matrix InverseInitGroundTruth = InitGroundTruth.getInverse();
+    //muss ich jetzt hier die Inverse noch mit dem Space Mittelpunkt multiplizieren?
+    //Space Mittelpunkt
+    obvious::Matrix SpaceMid(4, 4);
+    SpaceMid.setIdentity();
+    obvious::obfloat mid[3];
+    _space->getCentroid(mid);
+    SpaceMid = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, mid[0], mid[1], mid[2]); 
+    **/
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+//CURRENT TF --> kann mein tfListener hier auch auf groundtruth bleiben oder muss ich auf horizontal_velodyne gehen?
+//virgin push muss weg?
 
     // Eigen::Vector3f t(tf.getOrigin().getX(), tf.getOrigin().getY(), tf.getOrigin().getZ());
     tf::Vector3    tfVec = tfSensor.getOrigin();
@@ -301,12 +312,12 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     // obvious::obfloat yaw   = 0.0;
     // obvious::obfloat pitch = 0.0;
     // obvious::obfloat roll  = 0.0;
-    TransMat =
-        obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfVec.getY(), center[2] + tfVec.getZ());
+    TransMat = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfVec.getY(), center[2] + tfVec.getZ());
     _sensor->setTransformation(TransMat);
     std::cout << __PRETTY_FUNCTION__ << std::endl;
     std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
     _sensor->getTransformation().print();
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // extract data from pointcloud and write it to a vector of size height*weight, calculate depth value from xyz
     std::vector<double> depthData(cloud.height * cloud.width, 0.0);
