@@ -12,6 +12,7 @@
 #include <iostream>
 #include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
+#include <tf/transform_broadcaster.h>
 
 SensormodelTest::SensormodelTest(const float dimX, const float dimY, const float dimZ, const float cellSize)
     : _dimX(dimX), _dimY(dimY), _dimZ(dimZ), _cellSize(cellSize), _listener(std::make_unique<tf::TransformListener>()), _cellsX(0), _cellsY(0), _cellsZ(0)
@@ -270,32 +271,65 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     return;
   }
 
+  // tf::Transform carmen_pose
+  // double yaw, pitch, roll;
+  // 	tf::Matrix3x3(carmen_pose.getRotation()).getRPY(roll, pitch, yaw);
+
+  // tf_echo ground_truth map beim ersten bag timestamp: (-5.185, -8,285, 0.310)
 
   // nur first Push
-  if(!_virginPush) //muss das dann nicht weg?
+  if(!_virginPush) // muss das dann nicht weg?
   {
     std::cout << __PRETTY_FUNCTION__ << " virgin push, first point cloud in" << std::endl;
+    std::cout << __PRETTY_FUNCTION__ << "tfSensorBefore:  translation: " << tfSensor.getOrigin().getX() << " , " << tfSensor.getOrigin().getY() << " , "
+              << tfSensor.getOrigin().getZ() << std::endl;
 
-  //FIRST INITIAL GROUND TRUTH
-    //erste translation von groundtruth nach map rausziehen & const abspeichern. jede tf meiner punktwolke damit verschieben
-    //bei der ersten reicht translation, wenn ich dann die neue tf immer wieder im callback verwerte, brauch ich auch die rotation
+    static tf::TransformBroadcaster broadcaster;
+    // tf::StampedTransform            transformInit;
+    // transformInit.setOrigin(
+    //     tf::Vector3(5.185, 8.285, 0.310)); // ausgelesen mit tfEcho und *(-1) gerechnet um zu map zu kommen. kommt auch oben beim cout so raus
+    // tf::Quaternion qInit;
+    // qInit.setRPY(0.0, 0.0, 0.0);
+    // transformInit.setRotation(qInit);
+    // std::cout << __PRETTY_FUNCTION__ << "StampedTransform transformInit:  translation: " << transformInit.getOrigin().getX() << " , "
+    //           << transformInit.getOrigin().getY() << " , " << transformInit.getOrigin().getZ() << std::endl;
+
+    // add transformInit to tfSensor
+    // double x = tfSensor.getOrigin().getX() + 5.185;
+    // double y = tfSensor.getOrigin().getY() + 8.285;
+    // double z = tfSensor.getOrigin().getZ() + 0.310;
+    double x = tfSensor.getOrigin().getX() + (-1) * tfSensor.getOrigin().getX();
+    double y = tfSensor.getOrigin().getY() + (-1) * tfSensor.getOrigin().getY();
+    double z = tfSensor.getOrigin().getZ() + (-1) * tfSensor.getOrigin().getZ();
+    tfSensor.setOrigin(tf::Vector3(x, y, z));
+
+    std::cout << __PRETTY_FUNCTION__ << "!!!!tfSensorAfter:  translation: " << tfSensor.getOrigin().getX() << " , " << tfSensor.getOrigin().getY() << " , "
+              << tfSensor.getOrigin().getZ() << std::endl;
+
+    broadcaster.sendTransform(tf::StampedTransform(tfSensor, ros::Time::now(), "map", "ground_truth")); // oder groundtruth map vertauschen?
+
+    // abort();
+
+    // FIRST INITIAL GROUND TRUTH
+    // erste translation von groundtruth nach map rausziehen & const abspeichern. jede tf meiner punktwolke damit verschieben
+    // bei der ersten reicht translation, wenn ich dann die neue tf immer wieder im callback verwerte, brauch ich auch die rotation
     /**
     const tf::Vector3 translGroundTrInitial = tfSensor.getOrigin();
     const obvious::Matrix InitGroundTruth(4, 4);
-    InitGroundTruth = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, translGroundTrInitial.getX(), translGroundTrInitial.getY(), translGroundTrInitial.getZ());
-    const obvious::Matrix InverseInitGroundTruth = InitGroundTruth.getInverse();
+    InitGroundTruth = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, translGroundTrInitial.getX(), translGroundTrInitial.getY(),
+    translGroundTrInitial.getZ()); const obvious::Matrix InverseInitGroundTruth = InitGroundTruth.getInverse();
     //muss ich jetzt hier die Inverse noch mit dem Space Mittelpunkt multiplizieren?
     //Space Mittelpunkt
     obvious::Matrix SpaceMid(4, 4);
     SpaceMid.setIdentity();
     obvious::obfloat mid[3];
     _space->getCentroid(mid);
-    SpaceMid = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, mid[0], mid[1], mid[2]); 
+    SpaceMid = obvious::MatrixFactory::TransformationMatrix44(0.0, 0.0, 0.0, mid[0], mid[1], mid[2]);
     **/
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-//CURRENT TF --> kann mein tfListener hier auch auf groundtruth bleiben oder muss ich auf horizontal_velodyne gehen?
-//virgin push muss weg?
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // CURRENT TF --> kann mein tfListener hier auch auf groundtruth bleiben oder muss ich auf horizontal_velodyne gehen?
+    // virgin push muss weg?
 
     // Eigen::Vector3f t(tf.getOrigin().getX(), tf.getOrigin().getY(), tf.getOrigin().getZ());
     tf::Vector3    tfVec = tfSensor.getOrigin();
@@ -312,12 +346,13 @@ void SensormodelTest::callbackPointcloud(const pcl::PointCloud<pcl::PointXYZ>& c
     // obvious::obfloat yaw   = 0.0;
     // obvious::obfloat pitch = 0.0;
     // obvious::obfloat roll  = 0.0;
-    TransMat = obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfVec.getY(), center[2] + tfVec.getZ());
+    TransMat =
+        obvious::MatrixFactory::TransformationMatrix44(yaw, pitch, roll, center[0] + tfVec.getX(), center[1] + tfVec.getY(), center[2] + tfVec.getZ());
     _sensor->setTransformation(TransMat);
     std::cout << __PRETTY_FUNCTION__ << std::endl;
     std::cout << "You're getting there, love! Current Transformation of sensor: " << std::endl;
     _sensor->getTransformation().print();
-//////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // extract data from pointcloud and write it to a vector of size height*weight, calculate depth value from xyz
     std::vector<double> depthData(cloud.height * cloud.width, 0.0);
