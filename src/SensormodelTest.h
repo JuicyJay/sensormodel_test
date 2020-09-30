@@ -49,4 +49,5 @@ private:
   unsigned int _cellsY;
   unsigned int _cellsZ;
   bool         _virginPush;
+  bool         _withTf;
 };
